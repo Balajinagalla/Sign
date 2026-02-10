@@ -1,0 +1,18 @@
+# YOLO datasets
+Data/train/
+Data/valid/
+Data/test/
+
+# YOLO outputs
+runs/
+
+# Model weights
+*.pt
+*.onnx
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Env
+.env

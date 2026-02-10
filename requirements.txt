@@ -1,0 +1,21 @@
+# Core
+ultralytics>=8.3.0          # YOLOv11 + all dependencies
+torch>=2.5.0                # Already installed with CUDA (you have cu121)
+torchvision>=0.16.0
+torchaudio>=2.5.0
+
+# Computer Vision & Webcam
+opencv-python>=4.8.0        # cv2 for webcam and image display
+
+# Optional but recommended
+tqdm>=4.64.0                # Progress bars
+matplotlib>=3.7.0           # For plots (if you open results.png)
+pandas>=2.0.0               # For results.csv viewing
+seaborn>=0.12.0             # Better plots
+
+# Fix OpenMP error on Windows (highly recommended)
+numpy<2.0.0                 # Avoids numpy 2.0 + Intel OpenMP conflict
+
+
+
+# python 3.10
