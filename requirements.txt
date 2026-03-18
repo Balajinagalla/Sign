@@ -7,12 +7,6 @@ Pillow>=9.0.0
 # Web App
 streamlit>=1.30.0
 
-# TTS
-gTTS>=2.3.0
-pyttsx3>=2.90
-pygame>=2.5.0
-edge-tts>=6.1.0
-
 # ML
 torch>=2.0.0
 torchvision>=0.15.0

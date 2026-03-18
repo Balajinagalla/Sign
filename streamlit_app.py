@@ -111,7 +111,7 @@ if mode == "🔄 Text → Sign":
                 else:
                     st.info("Reference image not available")
 
-                from tts_indic_multi import TRANSLATIONS
+                from sign_constants import TRANSLATIONS
                 trans = TRANSLATIONS.get(matched.lower(), {})
                 if trans:
                     st.write("**Translations:**")
