@@ -1,21 +1,29 @@
 # Core
-ultralytics>=8.3.0          # YOLOv11 + all dependencies
-torch>=2.5.0                # Already installed with CUDA (you have cu121)
-torchvision>=0.16.0
-torchaudio>=2.5.0
+ultralytics>=8.3.0
+opencv-python-headless>=4.8.0
+numpy<2.0.0
+Pillow>=9.0.0
 
-# Computer Vision & Webcam
-opencv-python>=4.8.0        # cv2 for webcam and image display
+# Web App
+streamlit>=1.30.0
 
-# Optional but recommended
-tqdm>=4.64.0                # Progress bars
-matplotlib>=3.7.0           # For plots (if you open results.png)
-pandas>=2.0.0               # For results.csv viewing
-seaborn>=0.12.0             # Better plots
+# TTS
+gTTS>=2.3.0
+pyttsx3>=2.90
+pygame>=2.5.0
+edge-tts>=6.1.0
 
-# Fix OpenMP error on Windows (highly recommended)
-numpy<2.0.0                 # Avoids numpy 2.0 + Intel OpenMP conflict
+# ML
+torch>=2.0.0
+torchvision>=0.15.0
 
+# Utilities
+tqdm>=4.64.0
+matplotlib>=3.7.0
+pandas>=2.0.0
+PyYAML>=6.0
 
-
-# python 3.10
+# ONNX (optional, for faster inference)
+onnx>=1.12.0
+onnxruntime>=1.14.0
+onnxslim>=0.1.0

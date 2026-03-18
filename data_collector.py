@@ -69,6 +69,16 @@ class DataCollectorApp:
         self.last_capture_time = 0
         self.use_full_frame = False  # Option to use full frame without bounding box
         
+        # Auto-cycle settings (cycle through all signs automatically)
+        self.auto_cycle_active = False
+        self.auto_cycle_sign_index = 0
+        self.auto_cycle_images_per_sign = 10
+        self.auto_cycle_captured_for_current = 0
+        self.auto_cycle_countdown = 0  # seconds remaining before capture starts
+        self.auto_cycle_countdown_start = 0
+        self.auto_cycle_sign_delay = 5  # 5 seconds between signs
+        self.auto_cycle_phase = 'idle'  # 'idle', 'countdown', 'capturing'
+        
         # Hand detection settings
         self.auto_detect_hand = False
         self.detected_hand_bbox = None
@@ -95,7 +105,7 @@ class DataCollectorApp:
                 self.mp_hands = mp.solutions.hands
                 self.hands = self.mp_hands.Hands(
                     static_image_mode=False,
-                    max_num_hands=1,
+                    max_num_hands=2,
                     min_detection_confidence=0.5,
                     min_tracking_confidence=0.5
                 )
@@ -281,6 +291,29 @@ class DataCollectorApp:
         self.hand_status_label = tk.Label(row3, text="Hand: Not detected", 
                                           font=("Arial", 10), bg="#34495e", fg="#95a5a6")
         self.hand_status_label.pack(side=tk.RIGHT, padx=10)
+
+        # Row 4: Auto-Cycle All Signs
+        row4 = tk.Frame(settings_frame, bg="#34495e")
+        row4.pack(fill=tk.X, pady=5)
+        
+        self.auto_cycle_btn = tk.Button(row4, text="🔁 Auto-Cycle All Signs", 
+                                        command=self.start_auto_cycle,
+                                        bg="#e67e22", fg="white", font=("Arial", 10, "bold"), width=22)
+        self.auto_cycle_btn.pack(side=tk.LEFT, padx=5)
+        
+        tk.Label(row4, text="Images/sign:", font=("Arial", 10), 
+                bg="#34495e", fg="white").pack(side=tk.LEFT, padx=5)
+        
+        self.cycle_imgs_var = tk.IntVar(value=10)
+        self.cycle_imgs_spinbox = tk.Spinbox(row4, from_=5, to=50, width=5,
+                                             textvariable=self.cycle_imgs_var,
+                                             font=("Arial", 10))
+        self.cycle_imgs_spinbox.pack(side=tk.LEFT, padx=5)
+        
+        self.auto_cycle_status = tk.Label(row4, text="", 
+                                          font=("Arial", 10, "bold"), bg="#34495e", fg="#f1c40f")
+        self.auto_cycle_status.pack(side=tk.LEFT, padx=15)
+
         control_frame = tk.Frame(self.root, bg="#2c3e50")
         control_frame.pack(pady=10)
 
@@ -333,7 +366,7 @@ class DataCollectorApp:
                                    bg="#f39c12", fg="white", font=("Arial", 11, "bold"), width=12)
         self.clear_btn.pack(side=tk.LEFT, padx=5)
 
-        self.retrain_btn = tk.Button(action_frame, text="🚀 Retrain Model", command=self.retrain_model,
+        self.retrain_btn = tk.Button(action_frame, text="🚀 Train Model", command=self.retrain_model,
                                      bg="#1abc9c", fg="white", font=("Arial", 11, "bold"), width=14)
         self.retrain_btn.pack(side=tk.LEFT, padx=5)
 
@@ -470,7 +503,7 @@ class DataCollectorApp:
         self.hand_detection_padding = int(float(value))
     
     def _detect_hand(self, frame):
-        """Detect hand in frame using MediaPipe or skin color detection"""
+        """Detect hands (up to 2) in frame using MediaPipe or skin color detection"""
         # Try MediaPipe first if available
         if MEDIAPIPE_AVAILABLE and self.hands is not None:
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -478,15 +511,18 @@ class DataCollectorApp:
             
             if results.multi_hand_landmarks:
                 h, w, _ = frame.shape
-                hand_landmarks = results.multi_hand_landmarks[0]
+                # Collect landmarks from ALL detected hands (up to 2)
+                all_x = []
+                all_y = []
+                for hand_landmarks in results.multi_hand_landmarks:
+                    all_x.extend([lm.x * w for lm in hand_landmarks.landmark])
+                    all_y.extend([lm.y * h for lm in hand_landmarks.landmark])
                 
-                x_coords = [lm.x * w for lm in hand_landmarks.landmark]
-                y_coords = [lm.y * h for lm in hand_landmarks.landmark]
-                
-                x_min = int(max(0, min(x_coords) - self.hand_detection_padding))
-                y_min = int(max(0, min(y_coords) - self.hand_detection_padding))
-                x_max = int(min(w, max(x_coords) + self.hand_detection_padding))
-                y_max = int(min(h, max(y_coords) + self.hand_detection_padding))
+                # Single bounding box encompassing both hands
+                x_min = int(max(0, min(all_x) - self.hand_detection_padding))
+                y_min = int(max(0, min(all_y) - self.hand_detection_padding))
+                x_max = int(min(w, max(all_x) + self.hand_detection_padding))
+                y_max = int(min(h, max(all_y) + self.hand_detection_padding))
                 
                 return (x_min, y_min, x_max, y_max)
             return None
@@ -517,20 +553,28 @@ class DataCollectorApp:
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         if contours:
-            # Get largest contour (assumed to be hand)
-            largest_contour = max(contours, key=cv2.contourArea)
-            area = cv2.contourArea(largest_contour)
-            
-            # Filter by minimum area (avoid noise)
+            # Get top 2 largest contours (both hands)
             min_area = (h * w) * 0.02  # At least 2% of frame
-            if area > min_area:
-                x, y, bw, bh = cv2.boundingRect(largest_contour)
+            valid_contours = [c for c in contours if cv2.contourArea(c) > min_area]
+            valid_contours.sort(key=cv2.contourArea, reverse=True)
+            valid_contours = valid_contours[:2]  # Keep up to 2 hands
+            
+            if valid_contours:
+                # Merge bounding boxes of all valid contours
+                x_min_all, y_min_all = w, h
+                x_max_all, y_max_all = 0, 0
+                for contour in valid_contours:
+                    cx, cy, cbw, cbh = cv2.boundingRect(contour)
+                    x_min_all = min(x_min_all, cx)
+                    y_min_all = min(y_min_all, cy)
+                    x_max_all = max(x_max_all, cx + cbw)
+                    y_max_all = max(y_max_all, cy + cbh)
                 
                 # Add padding
-                x_min = max(0, x - self.hand_detection_padding)
-                y_min = max(0, y - self.hand_detection_padding)
-                x_max = min(w, x + bw + self.hand_detection_padding)
-                y_max = min(h, y + bh + self.hand_detection_padding)
+                x_min = max(0, x_min_all - self.hand_detection_padding)
+                y_min = max(0, y_min_all - self.hand_detection_padding)
+                x_max = min(w, x_max_all + self.hand_detection_padding)
+                y_max = min(h, y_max_all + self.hand_detection_padding)
                 
                 return (x_min, y_min, x_max, y_max)
         
@@ -566,9 +610,117 @@ class DataCollectorApp:
         captured = self.batch_capture_count - self.batch_remaining
         self.status_label.config(text=f"Batch stopped. Captured {captured} images.")
     
+    def start_auto_cycle(self):
+        """Start auto-cycle mode: cycles through all signs, 5s countdown each"""
+        if not self.running:
+            messagebox.showwarning("Warning", "Please start the camera first!")
+            return
+        
+        try:
+            self.auto_cycle_images_per_sign = int(self.cycle_imgs_var.get())
+        except:
+            self.auto_cycle_images_per_sign = 10
+        
+        self.auto_cycle_active = True
+        self.auto_cycle_sign_index = 0
+        self.auto_cycle_captured_for_current = 0
+        self.auto_cycle_phase = 'countdown'
+        self.auto_cycle_countdown_start = time.time()
+        self.last_capture_time = time.time()
+        
+        # Force full-frame mode
+        self.full_frame_var.set(True)
+        self.use_full_frame = True
+        
+        # Select first sign
+        self.class_combo.set(self.CLASS_NAMES[0])
+        self._update_progress_display()
+        
+        self.auto_cycle_btn.config(text="⏹ Stop Auto-Cycle", command=self.stop_auto_cycle, bg="#e74c3c")
+        self.status_label.config(text=f"🔁 Auto-Cycle: Prepare sign '{self.CLASS_NAMES[0]}' — 5s countdown...")
+    
+    def stop_auto_cycle(self):
+        """Stop auto-cycle mode"""
+        self.auto_cycle_active = False
+        self.auto_cycle_phase = 'idle'
+        self.auto_cycle_btn.config(text="🔁 Auto-Cycle All Signs", command=self.start_auto_cycle, bg="#e67e22")
+        self.auto_cycle_status.config(text="")
+        total = self.auto_cycle_sign_index * self.auto_cycle_images_per_sign + self.auto_cycle_captured_for_current
+        self.status_label.config(text=f"Auto-Cycle stopped. Total captured: {total} images.")
+    
+    def _auto_cycle_tick(self):
+        """Handle auto-cycle state machine"""
+        if not self.auto_cycle_active:
+            return
+        
+        current_time = time.time()
+        current_sign = self.CLASS_NAMES[self.auto_cycle_sign_index]
+        
+        if self.auto_cycle_phase == 'countdown':
+            elapsed = current_time - self.auto_cycle_countdown_start
+            remaining = max(0, self.auto_cycle_sign_delay - elapsed)
+            self.auto_cycle_countdown = int(remaining) + 1
+            
+            sign_num = self.auto_cycle_sign_index + 1
+            total_signs = len(self.CLASS_NAMES)
+            self.auto_cycle_status.config(
+                text=f"Sign {sign_num}/{total_signs}: '{current_sign}' — {self.auto_cycle_countdown}s")
+            self.status_label.config(
+                text=f"🔁 Get ready! Show sign '{current_sign.upper()}' in {self.auto_cycle_countdown}s...")
+            
+            if remaining <= 0:
+                # Countdown done, start capturing
+                self.auto_cycle_phase = 'capturing'
+                self.auto_cycle_captured_for_current = 0
+                self.last_capture_time = current_time
+        
+        elif self.auto_cycle_phase == 'capturing':
+            # Capture at the auto_capture_interval rate
+            if current_time - self.last_capture_time >= self.auto_capture_interval:
+                self._capture_and_save_auto()
+                self.auto_cycle_captured_for_current += 1
+                self.last_capture_time = current_time
+                
+                remaining = self.auto_cycle_images_per_sign - self.auto_cycle_captured_for_current
+                self.auto_cycle_status.config(
+                    text=f"📷 '{current_sign}': {self.auto_cycle_captured_for_current}/{self.auto_cycle_images_per_sign}")
+                self.status_label.config(
+                    text=f"🔁 Capturing '{current_sign.upper()}' — {remaining} images left...")
+                
+                if self.auto_cycle_captured_for_current >= self.auto_cycle_images_per_sign:
+                    # Move to next sign
+                    self.auto_cycle_sign_index += 1
+                    
+                    if self.auto_cycle_sign_index >= len(self.CLASS_NAMES):
+                        # All signs done!
+                        total = len(self.CLASS_NAMES) * self.auto_cycle_images_per_sign
+                        self.auto_cycle_active = False
+                        self.auto_cycle_phase = 'idle'
+                        self.auto_cycle_btn.config(text="🔁 Auto-Cycle All Signs", 
+                                                   command=self.start_auto_cycle, bg="#e67e22")
+                        self.auto_cycle_status.config(text="✅ All signs done!")
+                        self.status_label.config(text=f"✅ Auto-Cycle complete! Captured {total} images across all signs.")
+                        messagebox.showinfo("Auto-Cycle Complete", 
+                            f"✅ Captured {self.auto_cycle_images_per_sign} images for each of {len(self.CLASS_NAMES)} signs!\n"
+                            f"Total: {total} new images.")
+                        return
+                    
+                    # Start countdown for next sign
+                    next_sign = self.CLASS_NAMES[self.auto_cycle_sign_index]
+                    self.class_combo.set(next_sign)
+                    self._update_progress_display()
+                    self.auto_cycle_phase = 'countdown'
+                    self.auto_cycle_countdown_start = time.time()
+                    self.status_label.config(text=f"🔁 Next sign: '{next_sign.upper()}' — prepare in 5s...")
+
     def _auto_capture_tick(self):
         """Check if it's time to auto-capture"""
         current_time = time.time()
+        
+        # Auto-cycle mode takes priority
+        if self.auto_cycle_active:
+            self._auto_cycle_tick()
+            return
         
         # Batch capture mode
         if self.batch_capturing and self.batch_remaining > 0:
@@ -763,22 +915,44 @@ class DataCollectorApp:
                     # Draw detected hand bbox on frame (cyan color)
                     cv2.rectangle(frame, (hand_bbox[0], hand_bbox[1]), 
                                  (hand_bbox[2], hand_bbox[3]), (255, 255, 0), 3)
-                    cv2.putText(frame, "HAND DETECTED", (10, 90),
+                    cv2.putText(frame, "HANDS DETECTED", (10, 90),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-                    self.hand_status_label.config(text="Hand: ✅ Detected", fg="#27ae60")
+                    self.hand_status_label.config(text="Hands: ✅ Detected", fg="#27ae60")
                 else:
                     self.detected_hand_bbox = None
                     self.hand_status_label.config(text="Hand: ❌ Not detected", fg="#e74c3c")
             
-            # Add visual indicator for auto-capture/batch mode
-            if self.batch_capturing:
+            # Add visual indicator for auto-capture/batch/cycle mode
+            if self.auto_cycle_active:
+                current_sign = self.CLASS_NAMES[self.auto_cycle_sign_index]
+                if self.auto_cycle_phase == 'countdown':
+                    # Big countdown overlay
+                    cv2.rectangle(frame, (0, 0), (640, 480), (0, 0, 0), -1)  # dim background
+                    frame[:] = (frame * 0.3).astype(np.uint8)  # darken
+                    cv2.putText(frame, f"PREPARE SIGN:", (120, 160),
+                               cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255), 3)
+                    cv2.putText(frame, f"{current_sign.upper()}", (100, 250),
+                               cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), 4)
+                    cv2.putText(frame, f"{self.auto_cycle_countdown}", (280, 380),
+                               cv2.FONT_HERSHEY_SIMPLEX, 4.0, (255, 255, 255), 6)
+                    sign_num = self.auto_cycle_sign_index + 1
+                    cv2.putText(frame, f"Sign {sign_num}/{len(self.CLASS_NAMES)}", (220, 450),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2)
+                elif self.auto_cycle_phase == 'capturing':
+                    cv2.putText(frame, f"CAPTURING: {current_sign.upper()}", (10, 30),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                    captured = self.auto_cycle_captured_for_current
+                    total = self.auto_cycle_images_per_sign
+                    cv2.putText(frame, f"{captured}/{total}", (10, 60),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+            elif self.batch_capturing:
                 cv2.putText(frame, f"BATCH: {self.batch_remaining} left", (10, 30),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
             elif self.auto_capture_enabled:
                 cv2.putText(frame, "AUTO-CAPTURE ON", (10, 30),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             
-            if self.use_full_frame:
+            if self.use_full_frame and not self.auto_cycle_active:
                 cv2.putText(frame, "FULL FRAME MODE", (10, 60),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 165, 0), 2)
             
@@ -946,11 +1120,39 @@ class DataCollectorApp:
         self.resume_camera()
 
     def retrain_model(self):
-        result = messagebox.askyesno("Retrain Model", 
-            f"Start retraining with the updated dataset?\n\n"
-            f"Classes: {len(self.CLASS_NAMES)}\n"
-            f"New images: {self.collected_count}\n\n"
-            "This will run train.py in a new window.")
+        # Refresh image counts
+        self.class_image_counts = self._count_existing_images()
+        self._update_progress_display()
+        
+        # Build detailed dataset summary
+        total_images = sum(self.class_image_counts.values())
+        lines = []
+        warnings = 0
+        for name in self.CLASS_NAMES:
+            count = self.class_image_counts.get(name, 0)
+            if count < 10:
+                lines.append(f"  ❌ {name}: {count} images (too few!)")
+                warnings += 1
+            elif count < self.TARGET_IMAGES:
+                lines.append(f"  🟡 {name}: {count} images")
+            else:
+                lines.append(f"  ✅ {name}: {count} images")
+        
+        summary = "\n".join(lines)
+        
+        warn_msg = ""
+        if warnings > 0:
+            warn_msg = f"\n⚠️ {warnings} class(es) have fewer than 10 images!\nConsider collecting more data first.\n"
+        
+        result = messagebox.askyesno("🚀 Train Model", 
+            f"Start training with collected images?\n\n"
+            f"📊 Dataset Summary:\n"
+            f"  Classes: {len(self.CLASS_NAMES)}\n"
+            f"  Total images: {total_images}\n\n"
+            f"{summary}\n"
+            f"{warn_msg}\n"
+            f"Training will open in a new window.\n"
+            f"This may take 1-3 hours depending on your hardware.")
         
         if result:
             # Delete old cache files
@@ -967,10 +1169,13 @@ class DataCollectorApp:
             import subprocess
             subprocess.Popen(["python", "train.py"], 
                            creationflags=subprocess.CREATE_NEW_CONSOLE)
+            self.status_label.config(text="🚀 Training started in new window! You can continue collecting data.")
             messagebox.showinfo("Training Started", 
-                "Training started in a new window!\n\n"
+                "✅ Training started in a new window!\n\n"
                 "You can continue collecting more data.\n"
-                "Check the training window for progress.")
+                "Check the training window for progress.\n\n"
+                "After training completes, the new model\n"
+                "will be saved to runs/train/sign_lang_yolo11/weights/best.pt")
 
     def run(self):
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
