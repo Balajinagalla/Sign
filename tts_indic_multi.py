@@ -14,6 +14,7 @@ from sign_constants import LANGUAGES, LANG_CODES, TRANSLATIONS
 
 last_spoken = None
 lock = threading.Lock()
+audio_cache = {}  # Cache mapping (text, lang_code) -> audio_filepath
 
 async def _speak_async(label: str, lang_idx: int):
     global last_spoken
@@ -33,39 +34,50 @@ async def _speak_async(label: str, lang_idx: int):
             return
         last_spoken = (label, lang_idx)
 
+    cache_key = (text, lang_code)
+    
+    # ⚡ INSTANT PLAYBACK FROM CACHE ⚡
+    if cache_key in audio_cache and os.path.exists(audio_cache[cache_key]):
+        try:
+            pygame.mixer.music.load(audio_cache[cache_key])
+            pygame.mixer.music.play()
+            while pygame.mixer.music.get_busy():
+                await asyncio.sleep(0.05)
+            # Unload after playing to prevent locking issues
+            pygame.mixer.music.unload()
+            return
+        except Exception:
+            pass # fallback to generate anew
+
     tmp_file = f"temp_tts_{uuid.uuid4().hex}.mp3"
     
     try:
         print(f"Generating gTTS for: '{text}' in {lang_code}...")
         
-        # Use gTTS (Google Translate TTS) - Sync operation wrapped in executor if needed, 
-        # but here we are in async wrapper, so it blocks this thread (which is fine, it's a daemon thread).
+        # Use gTTS (Google Translate TTS)
         tts = gTTS(text=text, lang=lang_code, slow=False)
         tts.save(tmp_file)
+        
+        # Save to cache instead of deleting
+        audio_cache[cache_key] = tmp_file
         
         pygame.mixer.music.load(tmp_file)
         pygame.mixer.music.play()
         while pygame.mixer.music.get_busy():
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.05)
+        
+        # Unload music so we don't lock the file
+        pygame.mixer.music.unload()
             
     except Exception as e:
         print(f"Warning: Online gTTS failed ({e}). Switching to Offline TTS for: '{text}'")
         try:
             # Fallback to offline TTS (pyttsx3)
-            # Note: pyttsx3 generally only runs english if language packs aren't installed.
             engine = pyttsx3.init()
             engine.say(text)
             engine.runAndWait()
         except Exception as offline_e:
             print(f"Error: Offline TTS also failed: {offline_e}")
-            
-    finally:
-        try:
-            if os.path.exists(tmp_file):
-                pygame.mixer.music.unload() # Ensure file is released
-                os.remove(tmp_file)
-        except Exception as e:
-            print(f"Error cleaning up TTS file: {e}")
 
 def speak_sign(label: str, lang_idx: int):
     global last_spoken

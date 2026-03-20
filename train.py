@@ -5,7 +5,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 from ultralytics import YOLO
 
 # ---- Config ------------------------------------------------
-WEIGHTS = "yolo11s.pt"          # Small model (9.4M params vs nano's 2.6M)
+WEIGHTS = "yolo11n.pt"          # Nano model (2.6M params) = 3x Faster Training + Inference
 DATA_YAML = "Data/data.yaml"
 
 if __name__ == '__main__':
@@ -17,9 +17,9 @@ if __name__ == '__main__':
 
     results = model.train(
         data=DATA_YAML,
-        epochs=50,              # ~220 images → converges fast, 50 is enough
+        epochs=100,             # Increased epochs for higher accuracy
         imgsz=640,
-        batch=8 if device == 'cpu' else 4,  # Larger batch OK on CPU (no VRAM limit)
+        batch=16 if device == 0 else 8,  # Maximize GPU memory for faster batches
         name="sign_lang_yolo11",
         project="runs/train",
         exist_ok=True,
@@ -36,29 +36,29 @@ if __name__ == '__main__':
         weight_decay=0.001,     # Slightly higher regularization
         dropout=0.1,            # Light dropout to reduce overfitting
 
-        # ---- Heavy Augmentation (compensates for small dataset) ----
-        mosaic=1.0,             # Mosaic augmentation
-        mixup=0.3,              # Blend images together
-        copy_paste=0.2,         # Copy-paste augmentation
-        degrees=15.0,           # Rotation ±15°
-        translate=0.2,          # Translation ±20%
-        scale=0.7,              # Scale variation
-        shear=5.0,              # Shear ±5°
-        flipud=0.2,             # Vertical flip 20%
-        fliplr=0.5,             # Horizontal flip 50%
-        hsv_h=0.02,             # Hue variation
-        hsv_s=0.8,              # Saturation variation
-        hsv_v=0.5,              # Value/brightness variation
-        erasing=0.5,            # Random erasing
+        # ---- Heavy Augmentation (tuned for Hand Signs) ----
+        mosaic=1.0,             # Mosaic is great for context
+        mixup=0.0,              # Disabled: Mixup ruins fine hand shapes
+        copy_paste=0.0,         # Disabled: Copy-paste creates artificial edges
+        degrees=10.0,           # Lower rotation (signs are directional)
+        translate=0.1,          # Lower translation
+        scale=0.5,              # Moderate scale variation
+        shear=2.0,              # Lower shear (maintains finger shapes)
+        flipud=0.0,             # Disabled: Hand signs are never upside down!
+        fliplr=0.0,             # Disabled: ISL meaning changes if flipped!
+        hsv_h=0.015,            # Hue variation
+        hsv_s=0.7,              # Saturation variation
+        hsv_v=0.4,              # Dark/light variation
+        erasing=0.1,            # Very light erasing (don't cover fingers)
         close_mosaic=10,        # Disable mosaic for last 10 epochs
 
-        # ---- Transfer Learning ----
+        # ---- Transfer Learning & Speed ----
         freeze=10,              # Freeze first 10 backbone layers
-
+        
         # ---- Training Control ----
-        patience=15,            # Stop early if no improvement for 15 epochs
-        workers=4,
-        cache='ram',
+        patience=20,            # Stop early if no improvement
+        workers=8,              # Higher parallel workers
+        cache='ram',            # Cache to RAM for extreme speed
     )
 
     # Final test evaluation

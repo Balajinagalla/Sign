@@ -83,6 +83,23 @@ class DataCollectorApp:
         self.auto_detect_hand = False
         self.detected_hand_bbox = None
         self.hand_detection_padding = 30  # Extra padding around detected hand
+        
+        # Advanced Features
+        self.augment_enabled = False
+        self.blur_bg_enabled = False
+        self.voice_control_enabled = False
+        
+        # Load Image Segmenter for background blur
+        self.segmenter = None
+        if os.path.exists("selfie_segmenter.tflite"):
+            try:
+                from mediapipe.tasks import python as mp_python
+                from mediapipe.tasks.python import vision as mp_vision
+                base_options = mp_python.BaseOptions(model_asset_path="selfie_segmenter.tflite")
+                options = mp_vision.ImageSegmenterOptions(base_options=base_options, output_category_mask=True)
+                self.segmenter = mp_vision.ImageSegmenter.create_from_options(options)
+            except Exception as e:
+                print(f"Failed to load segmenter: {e}")
         self.hands = None
         self.mp_hands = None
         self.mp_draw = None
@@ -277,6 +294,25 @@ class DataCollectorApp:
         if not MEDIAPIPE_AVAILABLE:
             tk.Label(row3, text="(pip install mediapipe)", font=("Arial", 9), 
                     bg="#34495e", fg="#e74c3c").pack(side=tk.LEFT, padx=5)
+
+        # Advanced Feature Toggles
+        self.blur_bg_var = tk.BooleanVar(value=False)
+        self.blur_check = tk.Checkbutton(row3, text="🌫️ Blur Background", variable=self.blur_bg_var,
+                                         bg="#34495e", fg="white", selectcolor="#2c3e50", font=("Arial", 10, "bold"),
+                                         command=lambda: setattr(self, 'blur_bg_enabled', self.blur_bg_var.get()))
+        self.blur_check.pack(side=tk.LEFT, padx=5)
+        
+        self.augment_var = tk.BooleanVar(value=False)
+        self.augment_check = tk.Checkbutton(row3, text="✨ Extra Augmentation (5x)", variable=self.augment_var,
+                                            bg="#34495e", fg="white", selectcolor="#2c3e50", font=("Arial", 10, "bold"),
+                                            command=lambda: setattr(self, 'augment_enabled', self.augment_var.get()))
+        self.augment_check.pack(side=tk.LEFT, padx=5)
+        
+        self.voice_var = tk.BooleanVar(value=False)
+        self.voice_check = tk.Checkbutton(row3, text="🎤 Voice Control", variable=self.voice_var,
+                                          bg="#34495e", fg="white", selectcolor="#2c3e50", font=("Arial", 10, "bold"),
+                                          command=self._on_voice_toggle)
+        self.voice_check.pack(side=tk.LEFT, padx=5)
         
         tk.Label(row3, text="│  Padding:", font=("Arial", 10), 
                 bg="#34495e", fg="#95a5a6").pack(side=tk.LEFT, padx=10)
@@ -365,10 +401,14 @@ class DataCollectorApp:
         self.clear_btn = tk.Button(action_frame, text="🔄 Clear Box", command=self.clear_bbox,
                                    bg="#f39c12", fg="white", font=("Arial", 11, "bold"), width=12)
         self.clear_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.undo_btn = tk.Button(action_frame, text="↩️ Undo Last", command=self.undo_last_capture,
+                                  bg="#c0392b", fg="white", font=("Arial", 11, "bold"), width=12)
+        self.undo_btn.pack(side=tk.LEFT, padx=5)
 
-        self.retrain_btn = tk.Button(action_frame, text="🚀 Train Model", command=self.retrain_model,
-                                     bg="#1abc9c", fg="white", font=("Arial", 11, "bold"), width=14)
-        self.retrain_btn.pack(side=tk.LEFT, padx=5)
+        self.retrain_btn = tk.Button(action_frame, text="🔥 TRAIN MODEL NOW", command=self.retrain_model,
+                                     bg="#f1c40f", fg="#2c3e50", font=("Arial", 14, "bold"), width=20, borderwidth=5)
+        self.retrain_btn.pack(side=tk.LEFT, padx=15)
 
         # Status Frame
         status_frame = tk.Frame(self.root, bg="#2c3e50")
@@ -486,6 +526,66 @@ class DataCollectorApp:
         self.auto_capture_interval = float(value)
         self.interval_display.config(text=f"{self.auto_capture_interval}s")
     
+    def undo_last_capture(self):
+        """Removes tracking from last capture block"""
+        if not getattr(self, 'last_saved_files', []):
+            messagebox.showinfo("Undo", "Nothing to undo!")
+            return
+        
+        class_name = None
+        count_deleted = 0
+        for f in self.last_saved_files:
+            if os.path.exists(f):
+                os.remove(f)
+                count_deleted += 1
+                if f.endswith('.jpg') and not class_name:
+                    base = os.path.basename(f)
+                    class_name = base.split('_2026')[0].replace('_', ' ')
+        
+        if class_name and count_deleted > 0:
+            imgs_deleted = count_deleted // 2
+            self.class_image_counts[class_name] = max(0, self.class_image_counts.get(class_name, 0) - imgs_deleted)
+            self.collected_count = max(0, self.collected_count - imgs_deleted)
+            self._update_progress_display()
+            self.status_label.config(text=f"↩️ Undo successful: Removed {imgs_deleted} images")
+        
+        self.last_saved_files = []
+
+    def _on_voice_toggle(self):
+        """Handle voice control checkbox toggle"""
+        self.voice_control_enabled = self.voice_var.get()
+        if self.voice_control_enabled:
+            import speech_recognition as sr
+            import threading
+            self.recognizer = sr.Recognizer()
+            self.mic = sr.Microphone()
+            
+            def listen_loop():
+                while getattr(self, 'voice_control_enabled', False) and getattr(self, 'running', False):
+                    try:
+                        with self.mic as source:
+                            audio = self.recognizer.listen(source, timeout=1, phrase_time_limit=3)
+                        text = self.recognizer.recognize_google(audio).lower()
+                        print("Voice heard:", text)
+                        if "capture" in text or "take" in text or "picture" in text:
+                            self.root.after(0, self._capture_and_save_auto)
+                            self.root.after(0, lambda: self.status_label.config(text="🎤 Voice: Captured!"))
+                        elif "next" in text or "change" in text:
+                            idx = self.CLASS_NAMES.index(self.class_combo.get())
+                            idx = (idx + 1) % len(self.CLASS_NAMES)
+                            self.root.after(0, lambda: self.class_combo.set(self.CLASS_NAMES[idx]))
+                            self.root.after(0, self._update_progress_display)
+                            self.root.after(0, lambda: self.status_label.config(text=f"🎤 Voice: Changed to {self.CLASS_NAMES[idx]}"))
+                        elif "train" in text:
+                            self.root.after(0, self.retrain_model)
+                    except:
+                        pass
+            
+            self.status_label.config(text="🎤 Voice Control ON: Say 'Capture', 'Next', or 'Train'")
+            threading.Thread(target=listen_loop, daemon=True).start()
+        else:
+            self.status_label.config(text="Voice Control OFF")
+
     def _on_auto_detect_toggle(self):
         """Handle auto-detect hand checkbox toggle"""
         self.auto_detect_hand = self.auto_detect_var.get()
@@ -742,6 +842,42 @@ class DataCollectorApp:
                 self._capture_and_save_auto()
                 self.last_capture_time = current_time
     
+    def _save_augmented_image_set(self, frame, class_name, class_id, center_x, center_y, width, height, timestamp, unique_id):
+        """Saves originally captured frame, plus heavily augmented versions if enabled"""
+        images_to_save = [("orig", frame)]
+        
+        if getattr(self, 'augment_enabled', False):
+            # Rotations
+            h, w = frame.shape[:2]
+            M_left = cv2.getRotationMatrix2D((w/2, h/2), 5, 1.0)
+            M_right = cv2.getRotationMatrix2D((w/2, h/2), -5, 1.0)
+            images_to_save.append(("rot_L", cv2.warpAffine(frame, M_left, (w, h))))
+            images_to_save.append(("rot_R", cv2.warpAffine(frame, M_right, (w, h))))
+            
+            # Brightness variations
+            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            hh, ss, vv = cv2.split(hsv)
+            v_bright = cv2.add(vv, 30)
+            v_dark = cv2.subtract(vv, 30)
+            images_to_save.append(("bright", cv2.cvtColor(cv2.merge((hh, ss, v_bright)), cv2.COLOR_HSV2BGR)))
+            images_to_save.append(("dark", cv2.cvtColor(cv2.merge((hh, ss, v_dark)), cv2.COLOR_HSV2BGR)))
+
+        self.last_saved_files = []
+        saved_count = 0
+        for aug_suffix, aug_frame in images_to_save:
+            filename = f"{class_name.replace(' ', '_')}_{timestamp}_{unique_id}_{aug_suffix}"
+            img_path = os.path.join(self.train_images_dir, f"{filename}.jpg")
+            lbl_path = os.path.join(self.train_labels_dir, f"{filename}.txt")
+            
+            cv2.imwrite(img_path, aug_frame)
+            with open(lbl_path, 'w') as f:
+                f.write(f"{class_id} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
+            
+            self.last_saved_files.extend([img_path, lbl_path])
+            saved_count += 1
+            
+        return saved_count
+
     def _capture_and_save_auto(self):
         """Automatically capture and save current frame"""
         if self.display_frame is None:
@@ -758,36 +894,11 @@ class DataCollectorApp:
         unique_id = uuid.uuid4().hex[:8]
         filename = f"{class_name.replace(' ', '_')}_{timestamp}_{unique_id}"
         
-        # Save image
-        image_path = os.path.join(self.train_images_dir, f"{filename}.jpg")
-        cv2.imwrite(image_path, frame_to_save)
+        # Save augmented batch
+        saved_count = self._save_augmented_image_set(frame_to_save, class_name, class_id, center_x, center_y, width, height, timestamp, unique_id)
         
-        # Determine bounding box
-        img_h, img_w = frame_to_save.shape[:2]
-        
-        if self.use_full_frame:
-            # Use full frame as bounding box (with small margin)
-            margin = 0.02
-            center_x, center_y = 0.5, 0.5
-            width, height = 1.0 - margin*2, 1.0 - margin*2
-        else:
-            # Use drawn bounding box
-            x1, y1 = self.bbox_start
-            x2, y2 = self.bbox_end
-            center_x = ((x1 + x2) / 2) / img_w
-            center_y = ((y1 + y2) / 2) / img_h
-            width = abs(x2 - x1) / img_w
-            height = abs(y2 - y1) / img_h
-        
-        # Save label
-        label_path = os.path.join(self.train_labels_dir, f"{filename}.txt")
-        with open(label_path, 'w') as f:
-            f.write(f"{class_id} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
-        
-        self.collected_count += 1
-        
-        # Update class image count
-        self.class_image_counts[class_name] = self.class_image_counts.get(class_name, 0) + 1
+        self.collected_count += saved_count
+        self.class_image_counts[class_name] = self.class_image_counts.get(class_name, 0) + saved_count
         self._update_progress_display()
 
     def _update_progress_display(self):
@@ -955,6 +1066,33 @@ class DataCollectorApp:
             if self.use_full_frame and not self.auto_cycle_active:
                 cv2.putText(frame, "FULL FRAME MODE", (10, 60),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 165, 0), 2)
+                           
+            # Apply Background Blur if enabled
+            if getattr(self, 'blur_bg_enabled', False) and getattr(self, 'segmenter', None):
+                import mediapipe as mp
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                seg_result = self.segmenter.segment(mp_image)
+                mask = seg_result.category_mask.numpy_view()
+                condition = np.stack((mask,) * 3, axis=-1) > 0.1
+                bg_blur = cv2.GaussianBlur(frame, (55, 55), 0)
+                frame = np.where(condition, frame, bg_blur)
+
+            # Quality Indicator (Blur & Lighting)
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
+            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            brightness = hsv[:, :, 2].mean()
+
+            quality_color = (0, 255, 0)
+            quality_text = "Good"
+            if blur_score < 40:
+                quality_color = (0, 0, 255)
+                quality_text = "Too Blurry!"
+            elif brightness < 30:
+                quality_color = (0, 255, 255)
+                quality_text = "Too Dark!"
+            
+            cv2.putText(frame, f"Quality: {quality_text}", (10, 470), cv2.FONT_HERSHEY_SIMPLEX, 0.6, quality_color, 2)
             
             # Add capture count indicator (top-right corner)
             current_class = self.class_combo.get()
@@ -1071,29 +1209,11 @@ class DataCollectorApp:
         unique_id = uuid.uuid4().hex[:8]
         filename = f"{class_name.replace(' ', '_')}_{timestamp}_{unique_id}"
 
-        # Save image
-        image_path = os.path.join(self.train_images_dir, f"{filename}.jpg")
-        cv2.imwrite(image_path, self.current_frame)
+        # Save augmented batch
+        saved_count = self._save_augmented_image_set(self.current_frame, class_name, class_id, center_x, center_y, width, height, timestamp, unique_id)
 
-        # Convert bbox to YOLO format (normalized center x, center y, width, height)
-        img_h, img_w = self.current_frame.shape[:2]
-        x1, y1 = self.bbox_start
-        x2, y2 = self.bbox_end
-        
-        center_x = ((x1 + x2) / 2) / img_w
-        center_y = ((y1 + y2) / 2) / img_h
-        width = abs(x2 - x1) / img_w
-        height = abs(y2 - y1) / img_h
-
-        # Save label
-        label_path = os.path.join(self.train_labels_dir, f"{filename}.txt")
-        with open(label_path, 'w') as f:
-            f.write(f"{class_id} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
-
-        self.collected_count += 1
-        
-        # Update class image count
-        self.class_image_counts[class_name] = self.class_image_counts.get(class_name, 0) + 1
+        self.collected_count += saved_count
+        self.class_image_counts[class_name] = self.class_image_counts.get(class_name, 0) + saved_count
         current_count = self.class_image_counts[class_name]
         remaining = max(0, self.TARGET_IMAGES - current_count)
         
