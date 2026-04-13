@@ -1,0 +1,23 @@
+ 0 family       Tr= 25 Va= 11 Te= 3 Tot= 39 InModel=YES
+ 1 hello        Tr= 30 Va= 14 Te= 3 Tot= 47 InModel=YES
+ 2 help         Tr= 25 Va= 11 Te= 2 Tot= 38 InModel=YES
+ 3 house        Tr= 30 Va=  5 Te= 5 Tot= 40 InModel=YES
+ 4 ily          Tr= 25 Va= 10 Te= 4 Tot= 39 InModel=YES
+ 5 no           Tr= 25 Va=  6 Te= 2 Tot= 33 InModel=YES
+ 6 please       Tr= 25 Va=  2 Te= 4 Tot= 31 InModel=YES
+ 7 thank you    Tr= 33 Va=  7 Te= 3 Tot= 43 InModel=YES
+ 8 yes          Tr= 25 Va=  7 Te= 3 Tot= 35 InModel=YES
+ 9 agree        Tr= 35 Va=  0 Te= 0 Tot= 35 InModel=YES
+10 busy         Tr= 30 Va=  7 Te= 4 Tot= 41 InModel=NO
+11 close        Tr= 35 Va=  0 Te= 0 Tot= 35 InModel=NO
+12 cry          Tr= 25 Va=  0 Te= 0 Tot= 25 InModel=NO
+13 drink        Tr= 25 Va=  0 Te= 0 Tot= 25 InModel=NO
+14 deer         Tr= 25 Va=  0 Te= 0 Tot= 25 InModel=NO
+15 elephant     Tr= 25 Va=  0 Te= 0 Tot= 25 InModel=NO
+16 fever        Tr= 25 Va=  0 Te= 0 Tot= 25 InModel=NO
+17 give         Tr= 25 Va=  0 Te= 0 Tot= 25 InModel=NO
+18 injury       Tr= 25 Va=  0 Te= 0 Tot= 25 InModel=NO
+19 knife        Tr= 25 Va=  0 Te= 0 Tot= 25 InModel=NO
+20 man          Tr= 25 Va=  0 Te= 0 Tot= 25 InModel=NO
+21 tea          Tr= 25 Va=  0 Te= 0 Tot= 25 InModel=NO
+TOTAL: Tr=593 Va=80 Te=33 All=706

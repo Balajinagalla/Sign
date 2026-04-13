@@ -9,13 +9,39 @@ names:
 - thank you
 - 'yes'
 - agree
-nc: 10
-roboflow:
-  license: CC BY 4.0
-  project: sign-language-detection-luqut
-  url: https://universe.roboflow.com/abela/sign-language-detection-luqut/dataset/4
-  version: 4
-  workspace: abela
+- busy
+- close
+- cry
+- drink
+- deer
+- elephant
+- fever
+- give
+- injury
+- knife
+- man
+- tea
+- angry
+- bad
+- doing
+- class
+- friend
+- how
+- free
+- name
+- place
+- number
+- shirt
+- sleep
+- phone
+- promise
+- sure
+- wear
+- chat
+- that
+- thirsty
+- congratulations
+nc: 42
 test: ../test/images
 train: ../train/images
 val: ../valid/images

@@ -1,0 +1,526 @@
+================================================================================
+     ISL RECOGNITION PROJECT - COMPLETE SETUP GUIDE
+     Indian Sign Language Detection & Speech System
+     Last Updated: April 2026
+================================================================================
+
+TABLE OF CONTENTS
+-----------------
+  1. System Requirements
+  2. Files You Need to Transfer
+  3. Step-by-Step Installation
+  4. Running the Applications
+  5. Dataset & Training Setup
+  6. GPU vs CPU Setup
+  7. Troubleshooting
+  8. Quick Checklist
+
+
+================================================================================
+  1. SYSTEM REQUIREMENTS
+================================================================================
+
+MINIMUM HARDWARE:
+  - CPU       : Intel i5 / AMD Ryzen 5 or better
+  - RAM       : 8 GB minimum, 16 GB recommended
+  - Storage   : 5 GB free (without dataset), 15 GB (with dataset)
+  - Webcam    : Any USB or built-in camera
+  - GPU       : Not required for running (needed only for training)
+
+SOFTWARE REQUIREMENTS:
+  - Python    : 3.11 (EXACT - do NOT use 3.12 or 3.13)
+  - pip       : Latest version
+  - Git       : Latest (optional, for cloning)
+  - OS        : Windows 10/11, macOS 12+, or Ubuntu 20.04+
+
+*** IMPORTANT: Python 3.11 is REQUIRED. ***
+MediaPipe, Ultralytics, and PyTorch are tested on 3.11.
+Python 3.12+ may cause dependency conflicts.
+
+
+================================================================================
+  2. FILES YOU NEED TO TRANSFER
+================================================================================
+
+ESSENTIAL FILES (MUST COPY):
+-----------------------------
+
+  Code Files:
+    isl_gui_app.py            --> Main desktop GUI application (Tkinter)
+    streamlit_app.py           --> Web browser app (Streamlit)
+    tts_indic_multi.py         --> Text-to-Speech engine (13 languages)
+    sign_constants.py          --> Sign translations for 13 Indian languages
+    enhancements.py            --> Enhancement utilities (10 modules)
+    pdf_report.py              --> PDF/HTML session report generator
+    api_server.py              --> REST API server for integration
+    build_exe.py               --> Windows .exe packaging script
+    video_dataset.py           --> Video-to-YOLO dataset converter (GUI+CLI)
+    train.py                   --> Model training script (image + video)
+    data_collector.py          --> Dataset collection GUI tool (+ video import)
+    export_onnx.py             --> ONNX model export utility
+    predict.py                 --> Quick CLI prediction script
+    Dockerfile                 --> Docker container for deployment
+    requirements_full.txt      --> Complete Python dependencies list
+
+  Model Files:
+    best.pt                    --> Trained YOLO model (~5.5 MB) *** CRITICAL ***
+    best.onnx                  --> ONNX model (~10.8 MB) - faster CPU inference
+    yolo11n.pt                 --> YOLO11 Nano base weights (~5.6 MB)
+    yolo11s.pt                 --> YOLO11 Small base weights (~19.3 MB)
+    hand_landmarker.task       --> MediaPipe hand model (~7.8 MB)
+    selfie_segmenter.tflite    --> MediaPipe segmenter (~250 KB)
+
+  Reference Images:
+    sign_references/           --> Folder with 42 sign reference images (PNG)
+      agree.png, angry.png, bad.png, busy.png, chat.png, class.png,
+      close.png, congratulations.png, cry.png, deer.png, doing.png,
+      drink.png, elephant.png, family.png, fever.png, free.png,
+      friend.png, give.png, hello.png, help.png, house.png, how.png,
+      ily.png, injury.png, knife.png, man.png, name.png, no.png,
+      number.png, phone.png, place.png, please.png, promise.png,
+      shirt.png, sleep.png, sure.png, tea.png, thank_you.png,
+      that.png, thirsty.png, wear.png, yes.png
+
+  Dataset (ONLY if you want to retrain):
+    Data/
+      data.yaml                --> Dataset config (42 class names)
+      train/images/            --> Training images
+      train/labels/            --> YOLO format label files
+      valid/images/            --> Validation images
+      valid/labels/            --> Validation labels
+      test/images/             --> Test images
+      test/labels/             --> Test labels
+
+
+DO NOT COPY (auto-generated, recreate on new system):
+------------------------------------------------------
+    .venv/                     --> Virtual environment (recreate)
+    __pycache__/               --> Python cache (auto-generated)
+    runs/                      --> Training outputs (auto-generated)
+    temp_tts_*.mp3             --> TTS audio cache (auto-generated)
+    *.log                      --> Log files
+    frames/                    --> Extracted frames
+    extracted_frames/          --> Extracted frames
+    kaggle_dataset/            --> Raw Kaggle data
+
+
+TRANSFER SIZE ESTIMATES:
+    Without dataset:  ~50 MB   (models + code + references)
+    With dataset:     ~200-500 MB (depends on images collected)
+
+
+================================================================================
+  3. STEP-BY-STEP INSTALLATION
+================================================================================
+
+---------- STEP 1: Install Python 3.11 ----------
+
+  WINDOWS:
+    1. Go to: https://www.python.org/downloads/release/python-3119/
+    2. Download "Windows installer (64-bit)"
+    3. Run the installer
+    4. CHECK the box "Add Python to PATH" (VERY IMPORTANT!)
+    5. Click "Install Now"
+    6. Verify in PowerShell or CMD:
+         python --version
+       Should show: Python 3.11.x
+
+  macOS:
+    brew install python@3.11
+
+  LINUX (Ubuntu/Debian):
+    sudo apt update
+    sudo apt install python3.11 python3.11-venv python3.11-dev
+
+
+---------- STEP 2: Copy Project Files ----------
+
+  Copy/extract the project folder to a location on the new system:
+    Windows:   D:\yolo11\
+    macOS:     ~/projects/yolo11/
+    Linux:     ~/yolo11/
+
+  Make sure best.pt is in the root of the project folder!
+
+
+---------- STEP 3: Create Virtual Environment ----------
+
+  Open a terminal INSIDE the project folder:
+
+  WINDOWS (PowerShell):
+    cd D:\yolo11
+    python -m venv .venv
+    .\.venv\Scripts\Activate.ps1
+
+    NOTE: If you get an execution policy error, first run:
+      Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+  WINDOWS (CMD):
+    cd D:\yolo11
+    python -m venv .venv
+    .venv\Scripts\activate.bat
+
+  macOS / LINUX:
+    cd ~/yolo11
+    python3.11 -m venv .venv
+    source .venv/bin/activate
+
+  You should see (.venv) at the start of your terminal prompt.
+
+
+---------- STEP 4: Install Dependencies ----------
+
+  With the virtual environment ACTIVATED, run:
+
+    pip install --upgrade pip
+
+  Then install ALL packages (one single command):
+
+    pip install ultralytics>=8.3.0 opencv-python>=4.8.0 "numpy<2.0.0" Pillow>=9.0.0 mediapipe>=0.10.0 gTTS>=2.3.0 pygame>=2.5.0 pyttsx3>=2.90 edge-tts>=6.0.0 streamlit>=1.30.0 torch>=2.0.0 torchvision>=0.15.0 tqdm>=4.64.0 matplotlib>=3.7.0 pandas>=2.0.0 PyYAML>=6.0 onnx>=1.12.0 onnxruntime>=1.14.0 onnxslim>=0.1.0
+
+  OR use the requirements file:
+
+    pip install -r requirements_full.txt
+
+  This will take a few minutes. Wait for it to finish completely.
+
+
+---------- STEP 5: Verify Installation ----------
+
+  Run this command to check everything is installed:
+
+    python -c "import ultralytics; print(f'ultralytics: {ultralytics.__version__}'); import cv2; print(f'OpenCV: {cv2.__version__}'); import mediapipe; print(f'MediaPipe: {mediapipe.__version__}'); import torch; print(f'PyTorch: {torch.__version__}'); import pygame; print(f'pygame: {pygame.__version__}'); from gtts import gTTS; print('gTTS: OK'); import pyttsx3; print('pyttsx3: OK'); import streamlit; print(f'Streamlit: {streamlit.__version__}'); print('ALL DEPENDENCIES INSTALLED SUCCESSFULLY!')"
+
+  If all lines print without errors, you are good to go!
+
+
+================================================================================
+  4. RUNNING THE APPLICATIONS
+================================================================================
+
+*** ALWAYS activate your virtual environment first! ***
+
+  Windows:   .\.venv\Scripts\Activate.ps1
+  Mac/Linux: source .venv/bin/activate
+
+--------------------------------------------------------------------------
+
+  OPTION A: DESKTOP GUI APPLICATION (MAIN - RECOMMENDED)
+  -------------------------------------------------------
+  This is the primary app with real-time webcam detection, quiz mode,
+  text-to-sign translator, hand intelligence, and multilingual TTS.
+
+    python isl_gui_app.py
+
+  What to expect:
+    - A dark-themed desktop window opens (1150 x 850 pixels)
+    - Click the green "Start" button to turn on webcam
+    - Show hand signs to the camera
+    - Detected signs are displayed and spoken in your chosen language
+    - 4 tabs: Recognition, Quiz, Text-to-Sign, Advanced
+    - Choose from 9 languages in the dropdown
+    - Adjust confidence threshold with the slider
+
+--------------------------------------------------------------------------
+
+  OPTION B: STREAMLIT WEB APP
+  ----------------------------
+  A browser-based version (image upload, no live webcam stream).
+
+    streamlit run streamlit_app.py
+
+  Opens automatically at: http://localhost:8501
+  Use Ctrl+C in terminal to stop.
+
+--------------------------------------------------------------------------
+
+  OPTION C: DATA COLLECTOR TOOL
+  ------------------------------
+  Used to collect and label new training images with your webcam.
+
+    python data_collector.py
+
+  Features: Auto hand detection, batch capture, auto-cycle through signs,
+  voice control, background blur, live prediction overlay.
+
+--------------------------------------------------------------------------
+
+  OPTION D: VIDEO DATASET CONVERTER
+  -----------------------------------
+  Convert video files to YOLO training data with auto hand detection.
+
+    python video_dataset.py              (GUI mode)
+    python video_dataset.py --dir videos/ --interval 3   (CLI mode)
+
+  Expected folder structure:
+    videos/
+      hello/   --> video1.mp4, video2.avi
+      help/    --> clip1.mov
+      tea/     --> sample.webm
+
+--------------------------------------------------------------------------
+
+  OPTION E: REST API SERVER
+  --------------------------
+  Run the ISL detection API for integration with other apps.
+
+    python api_server.py
+
+  Server starts at: http://localhost:8000
+  API Documentation: http://localhost:8000/
+  Endpoints:
+    GET  /health          --> Health check
+    GET  /signs           --> List all signs
+    POST /detect          --> Detect signs in base64 image
+    POST /translate       --> Translate sign name
+
+--------------------------------------------------------------------------
+
+  OPTION F: GENERATE SESSION REPORT
+  -----------------------------------
+  Generate beautiful HTML reports with charts and statistics.
+
+    python pdf_report.py --open
+
+--------------------------------------------------------------------------
+
+  OPTION G: BUILD WINDOWS .EXE
+  -----------------------------
+  Package the app as a standalone executable (no Python required).
+
+    python build_exe.py
+
+  Output: dist/ISL_Recognition/ISL_Recognition.exe
+
+--------------------------------------------------------------------------
+
+  OPTION H: DOCKER DEPLOYMENT
+  ----------------------------
+  Deploy using Docker container.
+
+    docker build -t isl-recognition .
+    docker run -p 8000:8000 isl-recognition           (API mode)
+    docker run -p 8501:8501 isl-recognition streamlit  (Web mode)
+
+--------------------------------------------------------------------------
+
+  OPTION QUICK PREDICTION (CLI):
+  --------------------------------
+    python predict.py
+
+
+================================================================================
+  5. DATASET & TRAINING SETUP
+================================================================================
+
+*** You only need this if you want to RETRAIN the model or ADD NEW SIGNS. ***
+*** If you just want to RUN the app, skip this section entirely. ***
+
+  DATASET STRUCTURE (YOLO FORMAT):
+  --------------------------------
+    Data/
+      data.yaml          <-- Class configuration
+      train/
+        images/          <-- Training images (.jpg)
+        labels/          <-- YOLO labels (.txt, one per image)
+      valid/
+        images/          <-- Validation images
+        labels/          <-- Validation labels
+      test/
+        images/          <-- Test images
+        labels/          <-- Test labels
+
+  CURRENT SIGN CLASSES (42 total):
+  ---------------------------------
+    #0  family          #1  hello           #2  help
+    #3  house           #4  ily             #5  no
+    #6  please          #7  thank you       #8  yes
+    #9  agree           #10 busy            #11 close
+    #12 cry             #13 drink           #14 deer
+    #15 elephant        #16 fever           #17 give
+    #18 injury          #19 knife           #20 man
+    #21 tea             #22 angry           #23 bad
+    #24 doing           #25 class           #26 friend
+    #27 how             #28 free            #29 name
+    #30 place           #31 number          #32 shirt
+    #33 sleep           #34 phone           #35 promise
+    #36 sure            #37 wear            #38 chat
+    #39 that            #40 thirsty         #41 congratulations
+
+  TRAINING THE MODEL:
+  --------------------
+    python train.py
+    python train.py --video-dir videos/ --interval 3     (from videos)
+    python train.py --epochs 100 --batch 32              (custom params)
+    python train.py --help                               (full options)
+
+    - Auto-selects YOLO11 Nano/Small/Medium based on dataset size
+    - Supports BOTH image and video datasets
+    - Trains for 50 epochs with AdamW optimizer
+    - Uses cosine learning rate schedule
+    - Applies augmentation (mosaic, HSV, scale, rotation)
+    - Auto-deploys best.pt to project root after training
+    - Also exports best.onnx for faster CPU inference
+    - GPU: ~30-60 minutes | CPU: 3-8 hours (depending on dataset size)
+
+
+================================================================================
+  6. GPU vs CPU SETUP
+================================================================================
+
+  CPU ONLY (DEFAULT - WORKS OUT OF THE BOX):
+  -------------------------------------------
+    No extra setup needed. PyTorch CPU version is installed by default.
+    The app uses best.onnx or best.pt for inference.
+    Inference speed: ~5-15 FPS (depends on CPU)
+
+  NVIDIA GPU (RECOMMENDED FOR TRAINING):
+  ----------------------------------------
+
+    Step 1: Check your GPU
+      nvidia-smi
+
+    Step 2: Install CUDA Toolkit (11.8 or 12.x)
+      Download from: https://developer.nvidia.com/cuda-downloads
+
+    Step 3: Install PyTorch with CUDA support
+
+      First uninstall CPU version:
+        pip uninstall torch torchvision
+
+      Then install GPU version:
+
+      For CUDA 11.8:
+        pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+
+      For CUDA 12.1:
+        pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+
+    Step 4: Verify GPU is detected
+      python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}'); print(f'GPU: {torch.cuda.get_device_name(0)}' if torch.cuda.is_available() else 'No GPU')"
+
+
+================================================================================
+  7. TROUBLESHOOTING
+================================================================================
+
+  PROBLEM: ModuleNotFoundError: No module named 'xxx'
+  SOLUTION: pip install <module_name>
+  Common missing:  pip install mediapipe gTTS pygame pyttsx3 edge-tts
+
+  --------------------------------------------------------------------------
+
+  PROBLEM: protobuf version conflict with MediaPipe
+  SOLUTION: pip install "protobuf>=3.20,<5.0"
+
+  --------------------------------------------------------------------------
+
+  PROBLEM: Webcam not opening / "Cannot open webcam!"
+  SOLUTIONS:
+    1. Close any other app using the camera (Zoom, Teams, etc.)
+    2. Try a different camera index - edit isl_gui_app.py line 607:
+         self.cap = cv2.VideoCapture(1)   # try 1 or 2 instead of 0
+    3. Linux: sudo apt install v4l-utils
+
+  --------------------------------------------------------------------------
+
+  PROBLEM: best.pt not found
+  SOLUTION: Make sure best.pt is in the same folder as isl_gui_app.py
+            This is your trained model - without it, detection won't work.
+
+  --------------------------------------------------------------------------
+
+  PROBLEM: TTS (Text-to-Speech) not working / no audio
+  SOLUTIONS:
+    1. gTTS needs internet (it uses Google Translate API)
+    2. If offline, app falls back to pyttsx3:  pip install pyttsx3
+    3. Linux: sudo apt install espeak libespeak-dev
+
+  --------------------------------------------------------------------------
+
+  PROBLEM: pygame.error: No available audio device
+  SOLUTION (Linux):
+    sudo apt install pulseaudio alsa-utils
+    export SDL_AUDIODRIVER=pulse
+
+  --------------------------------------------------------------------------
+
+  PROBLEM: numpy version error / incompatibility
+  SOLUTION: pip install "numpy<2.0.0"
+
+  --------------------------------------------------------------------------
+
+  PROBLEM: Streamlit app shows blank or errors
+  SOLUTION:
+    pip install streamlit --upgrade
+    streamlit cache clear
+    streamlit run streamlit_app.py
+
+  --------------------------------------------------------------------------
+
+  PROBLEM: PowerShell won't activate .venv
+  SOLUTION:
+    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+    .\.venv\Scripts\Activate.ps1
+
+  --------------------------------------------------------------------------
+
+  PROBLEM: "KMP_DUPLICATE_LIB_OK" error during training
+  SOLUTION: This is already handled in train.py. If you see it elsewhere:
+    set KMP_DUPLICATE_LIB_OK=TRUE    (Windows CMD)
+    $env:KMP_DUPLICATE_LIB_OK="TRUE" (Windows PowerShell)
+    export KMP_DUPLICATE_LIB_OK=TRUE  (Linux/Mac)
+
+  --------------------------------------------------------------------------
+
+  PROBLEM: opencv-python vs opencv-python-headless conflict
+  SOLUTION:
+    pip uninstall opencv-python opencv-python-headless
+    pip install opencv-python>=4.8.0
+
+
+================================================================================
+  8. QUICK CHECKLIST FOR NEW SYSTEM SETUP
+================================================================================
+
+  [ ] 1. Install Python 3.11
+  [ ] 2. Copy project files to new system
+         (code files + best.pt + best.onnx + sign_references/ folder)
+  [ ] 3. Open terminal in project folder
+  [ ] 4. Create virtual environment:  python -m venv .venv
+  [ ] 5. Activate virtual environment
+  [ ] 6. Install dependencies:  pip install -r requirements_full.txt
+  [ ] 7. Verify:  python -c "import ultralytics; import mediapipe; print('OK')"
+  [ ] 8. Run:  python isl_gui_app.py
+  [ ] 9. Click "Start" button --> Show signs to camera --> Enjoy!
+
+
+================================================================================
+  PROJECT INFORMATION
+================================================================================
+
+  Project:       Indian Sign Language (ISL) Recognition System
+  Model:         YOLO11 (Ultralytics) trained on custom ISL dataset
+  Sign Classes:  42 Indian Sign Language signs
+  Languages:     English, Hindi, Tamil, Telugu, Bengali,
+                 Malayalam, Kannada, Gujarati, Marathi,
+                 Urdu, Punjabi, Assamese, Odia (13 total)
+  Features:      Real-time webcam detection, Temporal smoothing,
+                 Sentence builder, Quiz mode, Text-to-Sign translator,
+                 Hand Intelligence (MediaPipe), Multilingual TTS,
+                 Voice-to-Sign, Few-Shot Learner, Emotion-Aware TTS,
+                 Multi-Person Detection, Emergency Alerts,
+                 Sign Speed Coach, Live Confusion Matrix,
+                 Face Blur (Privacy), Grad-CAM Heatmaps,
+                 Session Recording, Learning Progress Tracker,
+                 Real-time Charts, PDF Report Generator,
+                 REST API Server, Video Dataset Converter,
+                 Dark/Light/High Contrast Themes, Fullscreen Mode,
+                 Conversation Mode, Sign Dictionary (Fuzzy Search),
+                 Gesture Shortcuts, Windows .exe Build, Docker Deploy
+  Python:        3.11
+  Framework:     Ultralytics YOLO11, MediaPipe, Tkinter, Streamlit
+
+================================================================================
+                  END OF SETUP GUIDE
+================================================================================

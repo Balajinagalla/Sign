@@ -1,0 +1,36 @@
+# ============================================================
+# ISL Recognition Project - Complete Requirements
+# Python 3.11 Required
+# Install: pip install -r requirements_full.txt
+# ============================================================
+
+# Core ML
+ultralytics>=8.3.0
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Computer Vision
+opencv-python>=4.8.0
+numpy<2.0.0
+Pillow>=9.0.0
+mediapipe>=0.10.0
+
+# Text-to-Speech (Multilingual)
+gTTS>=2.3.0
+pygame>=2.5.0
+pyttsx3>=2.90
+edge-tts>=6.0.0
+
+# Web App (Streamlit)
+streamlit>=1.30.0
+
+# Utilities
+tqdm>=4.64.0
+matplotlib>=3.7.0
+pandas>=2.0.0
+PyYAML>=6.0
+
+# ONNX (faster CPU inference - optional but recommended)
+onnx>=1.12.0
+onnxruntime>=1.14.0
+onnxslim>=0.1.0
