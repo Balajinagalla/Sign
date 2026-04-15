@@ -730,9 +730,7 @@ class ISLRecognitionApp:
         tk.Button(tool_row1, text="🌐 Start API Server", command=self._launch_api,
                   bg="#64b5f6", fg="#000", font=("Segoe UI", 9, "bold"),
                   relief=tk.FLAT, cursor="hand2", width=18).pack(side=tk.LEFT, padx=3)
-        tk.Button(tool_row1, text="📹 Video Converter", command=self._launch_video_tool,
-                  bg="#bb86fc", fg="white", font=("Segoe UI", 9, "bold"),
-                  relief=tk.FLAT, cursor="hand2", width=16).pack(side=tk.LEFT, padx=3)
+
         tool_row2 = tk.Frame(tools_card, bg=BG_CARD)
         tool_row2.pack(fill=tk.X, pady=2)
         tk.Button(tool_row2, text="📷 Data Collector", command=self._launch_collector,
@@ -848,9 +846,7 @@ class ISLRecognitionApp:
         subprocess.Popen([sys.executable, "api_server.py"])
         self.status_label.config(text="🌐 API Server started at http://localhost:8000")
 
-    def _launch_video_tool(self):
-        import subprocess, sys
-        subprocess.Popen([sys.executable, "video_dataset.py"])
+
 
     def _launch_collector(self):
         import subprocess, sys

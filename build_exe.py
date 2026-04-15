@@ -38,7 +38,7 @@ def build():
 
     # Python modules
     for pyfile in ['tts_indic_multi.py', 'sign_constants.py', 'enhancements.py',
-                    'pdf_report.py', 'video_dataset.py']:
+                    'pdf_report.py']:
         if os.path.exists(pyfile):
             data_files.append(f'--add-data={pyfile};.')
             print(f"  📦 Including: {pyfile}")

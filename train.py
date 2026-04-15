@@ -1,9 +1,9 @@
 # train.py - High-Accuracy Training for ISL Sign Language Detection
-# Supports BOTH image datasets AND video datasets
+# Supports image datasets only
 # Usage:
 #   python train.py                          # Train with existing image dataset
-#   python train.py --video-dir videos/      # Convert videos first, then train
-#   python train.py --video-dir videos/ --interval 3   # Custom frame interval
+#   python train.py --epochs 100             # Custom epochs
+#   python train.py --batch 32 --epochs 80   # Custom batch + epochs
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
@@ -28,56 +28,10 @@ def auto_select_model():
         return "yolo11m.pt"
 
 
-# ---- Video Dataset Pre-Processing -------------------------
-def process_video_dataset(video_dir, frame_interval=5):
-    """Convert a video folder into YOLO image dataset before training.
-    
-    Expected structure:
-        video_dir/
-            hello/
-                video1.mp4
-                video2.avi
-            thank you/
-                clip1.mov
-    """
-    from video_dataset import convert_video_dir
-
-    print(f"\n{'='*60}")
-    print(f"  📹 VIDEO DATASET PRE-PROCESSING")
-    print(f"  Source: {video_dir}")
-    print(f"  Frame interval: every {frame_interval} frames")
-    print(f"{'='*60}")
-
-    stats = convert_video_dir(
-        video_dir=video_dir,
-        output_dir="Data",
-        frame_interval=frame_interval,
-        split_ratio=(0.70, 0.20, 0.10),
-        hand_detect=True,
-        hand_padding=40,
-        skip_similar=True,
-        sim_threshold=0.95,
-        full_frame_fallback=True,
-        verbose=True
-    )
-
-    print(f"\n  📊 Video extraction summary:")
-    print(f"     Frames extracted: {stats['extracted']}")
-    print(f"     Duplicates skipped: {stats['skipped']}")
-    print(f"     Train: {stats['split']['train']} | Val: {stats['split']['valid']} | Test: {stats['split']['test']}")
-    for cls, count in sorted(stats['per_class'].items()):
-        print(f"     • {cls}: {count} frames")
-    print()
-
-    return stats
-
-
 # ---- Parse CLI Arguments -----------------------------------
 def parse_args():
-    """Parse command line arguments for video dataset support."""
+    """Parse command line arguments."""
     args = {
-        'video_dir': None,
-        'frame_interval': 5,
         'epochs': 50,
         'batch': 16,
         'imgsz': 640,
@@ -86,13 +40,7 @@ def parse_args():
     argv = sys.argv[1:]
     i = 0
     while i < len(argv):
-        if argv[i] == '--video-dir' and i + 1 < len(argv):
-            args['video_dir'] = argv[i + 1]
-            i += 2
-        elif argv[i] == '--interval' and i + 1 < len(argv):
-            args['frame_interval'] = int(argv[i + 1])
-            i += 2
-        elif argv[i] == '--epochs' and i + 1 < len(argv):
+        if argv[i] == '--epochs' and i + 1 < len(argv):
             args['epochs'] = int(argv[i + 1])
             i += 2
         elif argv[i] == '--batch' and i + 1 < len(argv):
@@ -120,30 +68,23 @@ USAGE:
   python train.py [OPTIONS]
 
 OPTIONS:
-  --video-dir PATH    Convert video folder to dataset before training
-                      Expected structure: videos/class_name/video.mp4
-  --interval N        Frame extraction interval (default: 5 = every 5th frame)
   --epochs N          Training epochs (default: 50)
   --batch N           Batch size (default: 16)
   --imgsz N           Image size (default: 640)
   --help              Show this help
 
 EXAMPLES:
-  # Train with existing image dataset only
+  # Train with existing image dataset
   python train.py
 
-  # Convert videos AND train
-  python train.py --video-dir videos/
-
-  # Convert videos with custom interval, then train 100 epochs
-  python train.py --video-dir videos/ --interval 3 --epochs 100
+  # Train for 100 epochs
+  python train.py --epochs 100
 
   # Train with larger batch on GPU
   python train.py --batch 32 --epochs 80
 
-DATASET FORMATS SUPPORTED:
+DATASET FORMAT:
   📷 Image Dataset:  Data/train/images/*.jpg + Data/train/labels/*.txt
-  📹 Video Dataset:  videos/class_name/video.{mp4,avi,mkv,mov,webm}
 """)
 
 
@@ -159,24 +100,10 @@ if __name__ == '__main__':
     print(f"  🤟 ISL Sign Language — Model Training")
     print(f"{'='*60}")
 
-    # ── VIDEO DATASET: Process videos first if --video-dir is provided ──
-    if args['video_dir']:
-        if not os.path.isdir(args['video_dir']):
-            print(f"\n  ❌ Error: Video directory not found: {args['video_dir']}")
-            print(f"  Expected structure:")
-            print(f"    {args['video_dir']}/")
-            print(f"      hello/")
-            print(f"        video1.mp4")
-            print(f"      help/")
-            print(f"        clip1.avi")
-            sys.exit(1)
-
-        process_video_dataset(args['video_dir'], args['frame_interval'])
-
     # ── Check dataset exists ──
     if not os.path.exists(DATA_YAML):
         print(f"\n  ❌ Error: {DATA_YAML} not found!")
-        print(f"  Either provide an image dataset in Data/ or use --video-dir")
+        print(f"  Please provide an image dataset in Data/")
         sys.exit(1)
 
     # ── Count images ──
@@ -192,7 +119,7 @@ if __name__ == '__main__':
 
     if n_train == 0:
         print(f"\n  ❌ Error: No training images found in Data/train/images/")
-        print(f"  Use --video-dir to convert videos, or add images manually.")
+        print(f"  Add images manually or use the Data Collector tool.")
         sys.exit(1)
 
     # ── Device selection ──
